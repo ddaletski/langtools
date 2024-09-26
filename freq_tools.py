@@ -1,8 +1,8 @@
+import math
 import re
 import sys
 from collections import defaultdict
 from typing import List, TextIO
-import math
 
 import click
 import spacy
@@ -18,7 +18,6 @@ def fail(message: str):
 def load_freqs(input: TextIO, description: str) -> defaultdict:
     freqs = defaultdict(int)
     for line in track(input.readlines(), description=description, console=console):
-        line = line.strip()
         fields = line.split("\t")
         stripped = line.strip("\n")
 
@@ -60,7 +59,7 @@ def build(inputs: List[TextIO], output: TextIO | None):
     for word, freq in freqs.items():
         output.write(f"{word}\t{freq}\n")
 
-@cli.command
+@cli.command(help="merge multiple frequency dictionaries")
 @click.argument("inputs", type=click.File('r'), nargs=-1)
 @click.option("-o", "--output", type=click.File('w'), default=sys.stdout)
 @click.option("-d", "--delimiter", type=str, default="\t", help="table delimiter")
@@ -88,7 +87,7 @@ def merge(inputs: List[TextIO],
         output.write(f"{word}{delimiter}{freq}\n")
 
 
-@cli.command
+@cli.command(help="clean words, removing numbers and punctuation")
 @click.argument("input", type=click.File('r'), default=sys.stdin)
 @click.option("-o", "--output", type=click.File('w'), default=sys.stdout)
 @click.option("-d", "--delimiter", type=str, default="\t", help="table delimiter")
@@ -101,7 +100,7 @@ def clean(input: TextIO, output: TextIO, delimiter: str):
 
         output.write(f"{word}{delimiter}{freq}\n")
 
-@cli.command
+@cli.command(help="normalize words (lemmatize)")
 @click.argument("input", type=click.File('r'), default=sys.stdin)
 @click.option("-o", "--output", type=click.File('w'), default=sys.stdout)
 @click.option("-d", "--delimiter", type=str, default="\t", help="table delimiter")
@@ -121,7 +120,7 @@ def normalize(input: TextIO, output: TextIO, delimiter: str, model: str):
         output.write(f"{word}{delimiter}{freq}\n")
 
 
-@cli.command
+@cli.command(help="select the most common words")
 @click.argument("input", type=click.File('r'), default=sys.stdin)
 @click.option("-o", "--output", type=click.File('w'), default=sys.stdout)
 @click.option("-d", "--delimiter", type=str, default="\t", help="table delimiter")
@@ -151,6 +150,22 @@ def select(input: TextIO, output: TextIO, delimiter: str, metric: str, percentil
         target -= impact
         if target <= 0:
             break
+
+@cli.command(help="find the difference between two frequency tables")
+@click.argument("before", type=click.File('r'), required=True)
+@click.argument("after", type=click.File('r'), required=True)
+@click.option("-o", "--output", type=click.File('w'), default=sys.stdout)
+@click.option("-d", "--delimiter", type=str, default="\t", help="table delimiter")
+def diff(before: TextIO, after: TextIO, output: TextIO, delimiter: str):
+    freqs_before = load_freqs(before, "Loading file #1...")
+    freqs_after = load_freqs(after, "Loading file #2...")
+
+    for key in track(freqs_before.keys() | freqs_after.keys(), description="Comparing...", console=console):
+        diff = freqs_after.get(key, 0) - freqs_before.get(key, 0)
+        if diff == 0:
+            continue
+
+        output.write(f"{key}{delimiter}{diff}\n")
 
 if __name__ == "__main__":
     cli()
