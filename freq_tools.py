@@ -12,13 +12,13 @@ from rich.progress import track
 console = Console(file=sys.stderr)
 
 def fail(message: str):
-    print(message, file=sys.stderr)
-    exit(1)
+    raise Exception(message)
 
-def load_freqs(input: TextIO, description: str) -> defaultdict:
+def load_freqs(input: TextIO, delimiter: str, description: str) -> defaultdict:
     freqs = defaultdict(int)
+
     for line in track(input.readlines(), description=description, console=console):
-        fields = line.split("\t")
+        fields = line.split(delimiter)
         stripped = line.strip("\n")
 
         try:
@@ -31,6 +31,7 @@ def load_freqs(input: TextIO, description: str) -> defaultdict:
             fail(f"failed to read a frequency from column #2 at '{stripped}'")
 
         freqs[word] += freq
+
     return freqs
 
 @click.group()
@@ -76,8 +77,8 @@ def merge(inputs: List[TextIO],
 
     merged = defaultdict(int)
     for file_idx, ifile in enumerate(inputs):
-        file_freqs = load_freqs(ifile, f"Processing file #{file_idx+1}")
-        for word, freq in file_freqs.items():
+        file_freqs = load_freqs(ifile, delimiter, f"Loading file #{file_idx+1}")
+        for word, freq in track(file_freqs.items(), description=f"Processing file #{file_idx+1}", console=console):
             if freq >= in_threshold:
                 merged[word] += freq
 
@@ -92,7 +93,7 @@ def merge(inputs: List[TextIO],
 @click.option("-o", "--output", type=click.File('w'), default=sys.stdout)
 @click.option("-d", "--delimiter", type=str, default="\t", help="table delimiter")
 def clean(input: TextIO, output: TextIO, delimiter: str):
-    freqs = load_freqs(input, "Loading...")
+    freqs = load_freqs(input, delimiter, "Loading...")
 
     for word, freq in track(freqs.items(), description="Cleaning...", console=console):
         if re.search(r"[0-9\W]", word):
@@ -108,7 +109,7 @@ def clean(input: TextIO, output: TextIO, delimiter: str):
 def normalize(input: TextIO, output: TextIO, delimiter: str, model: str):
     nlp = spacy.load(model)
 
-    freqs = load_freqs(input, "Loading...")
+    freqs = load_freqs(input, delimiter, "Loading...")
 
     normalized = defaultdict(int)
 
@@ -135,7 +136,7 @@ def select(input: TextIO, output: TextIO, delimiter: str, metric: str, percentil
     else:
         fail(f"unknown metric '{metric}'")
 
-    freqs = load_freqs(input, "Loading...")
+    freqs = load_freqs(input, delimiter, "Loading...")
     total = 0
     for word, freq in freqs.items():
         impact = impact_fn(word, freq)
@@ -157,8 +158,8 @@ def select(input: TextIO, output: TextIO, delimiter: str, metric: str, percentil
 @click.option("-o", "--output", type=click.File('w'), default=sys.stdout)
 @click.option("-d", "--delimiter", type=str, default="\t", help="table delimiter")
 def diff(before: TextIO, after: TextIO, output: TextIO, delimiter: str):
-    freqs_before = load_freqs(before, "Loading file #1...")
-    freqs_after = load_freqs(after, "Loading file #2...")
+    freqs_before = load_freqs(before, delimiter, "Loading file #1...")
+    freqs_after = load_freqs(after, delimiter, "Loading file #2...")
 
     for key in track(freqs_before.keys() | freqs_after.keys(), description="Comparing...", console=console):
         diff = freqs_after.get(key, 0) - freqs_before.get(key, 0)
