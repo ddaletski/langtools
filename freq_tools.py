@@ -128,7 +128,7 @@ def normalize(input: TextIO, output: TextIO, delimiter: str, model: str):
 @click.option("-m", "--metric", type=click.Choice(["words", "chars"]), default="words",
               help="how text volume is measured. 'words' targets understanding P%% of corpus words.\n'chars' targets understanding P%% of corpus text volume")
 @click.option("-p", "--percentile", type=click.IntRange(min=1, max=100), default=90, help="how much of the original text data would be kept if only the top N words are kept")
-def select(input: TextIO, output: TextIO, delimiter: str, metric: str, percentile: int):
+def select_top(input: TextIO, output: TextIO, delimiter: str, metric: str, percentile: int):
     if metric == "words":
         impact_fn = lambda _, freq: freq
     elif metric == "chars":
@@ -152,6 +152,25 @@ def select(input: TextIO, output: TextIO, delimiter: str, metric: str, percentil
         if target <= 0:
             break
 
+@cli.command(help="select given words from a frequency table")
+@click.option("--words", type=click.File('r'), required=True, help="list of words to select")
+@click.option("--table", type=click.File('r'), required=True, help="frequency table to sample from")
+@click.option("-o", "--output", type=click.File('w'), default=sys.stdout, help="output frequency table")
+@click.option("-d", "--delimiter", type=str, default="\t", help="table delimiter")
+@click.option("--missing", type=click.Choice(["skip", "zero"]), default="skip", help="how to handle missing words")
+def select(words: TextIO, table: TextIO, output: TextIO, delimiter: str, missing: str):
+    freqs = load_freqs(table, delimiter, "Loading...")
+
+    for line in track(words.readlines(), description="Selecting...", console=console):
+        word = line.strip("\n")
+
+        if word in freqs:
+            freq = freqs[word]
+            output.write(f"{word}{delimiter}{freq}\n")
+        elif missing == "zero":
+            output.write(f"{word}{delimiter}0\n")
+
+
 @cli.command(help="find the difference between two frequency tables")
 @click.argument("before", type=click.File('r'), required=True)
 @click.argument("after", type=click.File('r'), required=True)
@@ -167,6 +186,21 @@ def diff(before: TextIO, after: TextIO, output: TextIO, delimiter: str):
             continue
 
         output.write(f"{key}{delimiter}{diff}\n")
+
+
+@cli.command
+@click.option("--subset", type=click.File('r'), required=True)
+@click.option("--all", type=click.File('r'), required=True)
+def subset_stats(subset: TextIO, all: TextIO):
+    subset_freqs = load_freqs(subset, "\t", "Loading...")
+    all_freqs = load_freqs(all, "\t", "Loading...")
+
+    all_occurences = sum(all_freqs.values())
+    subset_occurrences = sum(subset_freqs.values())
+
+    percentage = subset_occurrences / all_occurences * 100
+    print(f"the subset spans {percentage:.2f}% of the corpus")
+
 
 if __name__ == "__main__":
     cli()
