@@ -17,10 +17,11 @@ console = Console(file=sys.stderr)
 @click.option("-d", "--delimiter", default="\t", help="table delimiter")
 def translate(input, output, src, dst, src_column, delimiter):
     reader = csv.reader(input, delimiter=delimiter)
+    data = list(reader)
 
-    for fields in track(reader, description="Translating...", console=console):
+    for fields in track(data, description="Translating...", console=console):
         word = fields[src_column]
-        translation = ts.translate_text(word, from_language=src, to_language=dst, translator='google')
+        translation = ts.translate_text(word, from_language=src, to_language=dst, translator='bing')
 
         fields.append(translation)
         output.write(delimiter.join(fields) + "\n")
